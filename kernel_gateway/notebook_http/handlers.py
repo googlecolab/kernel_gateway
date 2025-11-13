@@ -54,12 +54,13 @@ class NotebookAPIHandler(
     are identified, parsed, and associated with HTTP verbs and paths.
     """
 
-    def initialize(self, sources, response_sources, kernel_pool, kernel_name, kernel_language=""):
+    def initialize(self, sources, response_sources, kernel_pool, kernel_name, kernel_language="", description=""):
         self.kernel_pool = kernel_pool
         self.sources = sources
         self.kernel_name = kernel_name
         self.response_sources = response_sources
         self.kernel_language = kernel_language
+        self.description = description
 
     def _accumulate_display(self, results):
         """Accumulates result chunks for "display" messages and prepares them as
@@ -225,7 +226,15 @@ class NotebookAPIHandler(
             self.set_status(200)
 
             # Get the source to execute in response to this request
-            source_code = self.sources[self.request.method]
+            source_info = self.sources[self.request.method]
+            source_code = source_info['source']
+            cell_type = source_info['cell_type']
+
+            if cell_type == 'markdown':
+                self.set_header("Content-Type", "text/html")
+                self.write(source_code)
+                return
+
             # Build the request dictionary
             request = json.dumps(
                 {

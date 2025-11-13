@@ -107,10 +107,8 @@ class NotebookHTTPPersonality(LoggingConfigurable):
             handlers.append((path, tornado.web.StaticFileHandler, {"path": self.static_path}))
 
         # Discover the notebook endpoints and their implementations
-        endpoints = self.api_parser.endpoints(self.parent.kernel_manager.seed_source)
-        response_sources = self.api_parser.endpoint_responses(
-            self.parent.kernel_manager.seed_source
-        )
+        endpoints = self.api_parser.endpoints()
+        response_sources = self.api_parser.endpoint_responses()
         if len(endpoints) == 0:
             raise RuntimeError(
                 "No endpoints were discovered. Check your notebook to make sure your cells are annotated correctly."
@@ -118,6 +116,7 @@ class NotebookHTTPPersonality(LoggingConfigurable):
 
         # Cycle through the (endpoint_path, source) tuples and register their handlers
         for endpoint_path, verb_source_map in endpoints:
+            description = verb_source_map.pop("__description__", "")
             parameterized_path = parameterize_path(endpoint_path)
             parameterized_path = url_path_join("/", self.parent.base_url, parameterized_path)
             self.log.info(
@@ -134,6 +133,7 @@ class NotebookHTTPPersonality(LoggingConfigurable):
                 "kernel_pool": self.kernel_pool,
                 "kernel_name": self.parent.kernel_manager.seed_kernelspec,
                 "kernel_language": self.kernel_language or "",
+                "description": description,
             }
             handlers.append((parameterized_path, NotebookAPIHandler, handler_args))
 
