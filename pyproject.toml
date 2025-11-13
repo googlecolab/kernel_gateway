@@ -39,6 +39,8 @@ dependencies = [
     "requests>=2.31",
     "tornado>=6.4",
     "traitlets>=5.14.1",
+    "markdown>=3.3.4",
+    "ipykernel>=6.29.5",
 ]
 
 [project.scripts]

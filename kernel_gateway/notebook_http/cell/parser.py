@@ -5,6 +5,7 @@
 import re
 import sys
 
+import markdown
 from traitlets import Unicode
 from traitlets.config.configurable import LoggingConfigurable
 
@@ -79,6 +80,7 @@ class APICellParser(LoggingConfigurable):
         self.kernelspec_api_response_indicator = re.compile(
             self.api_response_indicator.format(comment_prefix)
         )
+        self.notebook_cells = notebook_cells or []
 
     def is_api_cell(self, cell_source):
         """Gets if the cell source is annotated as an API endpoint.
@@ -151,13 +153,29 @@ class APICellParser(LoggingConfigurable):
         """
         return {"responses": {200: {"description": "Success"}}}
 
-    def endpoints(self, source_cells, sort_func=first_path_param_index):
+    def render_markdown_cell(self, cell_source):
+        """Renders a markdown cell as HTML.
+
+        Parameters
+        ----------
+        cell_source
+            Source from a notebook cell
+
+        Returns
+        -------
+        str
+            HTML representation of the markdown cell
+        """
+        source_lines = cell_source.split('\n')
+        if source_lines and self.is_api_cell(source_lines[0]):
+            source_lines.pop(0)
+        return markdown.markdown('\n'.join(source_lines))
+
+    def endpoints(self, sort_func=first_path_param_index):
         """Gets the list of all annotated endpoint HTTP paths and verbs.
 
         Parameters
         ----------
-        source_cells
-            List of source strings from notebook cells
         sort_func
             Function by which to sort the endpoint list
 
@@ -169,19 +187,24 @@ class APICellParser(LoggingConfigurable):
             element of each tuple
         """
         endpoints = {}
-        for cell_source in source_cells:
-            if self.is_api_cell(cell_source):
-                matched = self.kernelspec_api_indicator.match(cell_source)
+        for cell in self.notebook_cells:
+            if self.is_api_cell(cell.source):
+                matched = self.kernelspec_api_indicator.match(cell.source)
                 uri = matched.group(2).strip()
                 verb = matched.group(1)
 
-                endpoints.setdefault(uri, {}).setdefault(verb, "")
-                endpoints[uri][verb] += cell_source + "\n"
+                endpoints.setdefault(uri, {}).setdefault(verb, {})
+                if cell.cell_type == "markdown":
+                    endpoints[uri][verb]['source'] = self.render_markdown_cell(cell.source)
+                    endpoints[uri][verb]['cell_type'] = 'markdown'
+                else:
+                    endpoints[uri][verb]['source'] = cell.source + "\n"
+                    endpoints[uri][verb]['cell_type'] = 'code'
 
         sorted_keys = sorted(endpoints, key=sort_func, reverse=True)
         return [(key, endpoints[key]) for key in sorted_keys]
 
-    def endpoint_responses(self, source_cells, sort_func=first_path_param_index):
+    def endpoint_responses(self, sort_func=first_path_param_index):
         """Gets the list of all annotated ResponseInfo HTTP paths and verbs.
 
         Parameters
@@ -199,14 +222,14 @@ class APICellParser(LoggingConfigurable):
             element of each tuple
         """
         endpoints = {}
-        for cell_source in source_cells:
-            if self.is_api_response_cell(cell_source):
-                matched = self.kernelspec_api_response_indicator.match(cell_source)
+        for cell in self.notebook_cells:
+            if self.is_api_response_cell(cell.source):
+                matched = self.kernelspec_api_response_indicator.match(cell.source)
                 uri = matched.group(2).strip()
                 verb = matched.group(1)
 
                 endpoints.setdefault(uri, {}).setdefault(verb, "")
-                endpoints[uri][verb] += cell_source + "\n"
+                endpoints[uri][verb] += cell.source + "\n"
         return endpoints
 
     def get_default_api_spec(self):
